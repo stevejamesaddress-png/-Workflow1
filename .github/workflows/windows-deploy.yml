@@ -1,0 +1,56 @@
+name: ML Model Windows Rancher Deployment
+
+# -----------------------------------------------------------------
+# THE TRIGGER
+# -----------------------------------------------------------------
+on:
+  # 'workflow_dispatch' allows us to trigger this pipeline manually
+  # from the "Actions" tab in the GitHub repository.
+  workflow_dispatch:
+
+# -----------------------------------------------------------------
+# THE WORK
+# -----------------------------------------------------------------
+jobs:
+  build-and-deploy:
+    # 'runs-on: self-hosted' tells GitHub to look for YOUR specific
+    # Windows Rancher machine instead of spinning up a generic server.
+    runs-on: self-hosted
+
+    steps:
+      # --- STEP 1: GET THE CODE ---
+      # Uses a pre-built GitHub Action to download our repository files
+      # (stevejamesaddress-png) onto the runner machine.
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # --- STEP 2: BAKE THE DOCKER IMAGE ---
+      # Reads the Dockerfile, installs Python dependencies (Flask, scikit-learn),
+      # and creates a packaged template of our app named 'flask_ml_app'.
+      - name: Build Docker Image
+        run: docker build -t flask_ml_app .
+
+      # --- STEP 3: HOUSEKEEPING ---
+      # If we deploy twice, port 5000 will already be taken by the old version.
+      # This stops and deletes the old container so we have a clean slate.
+      # 'continue-on-error: true' ensures the script doesn't crash if no
+      # old container exists yet (like on the very first run).
+      - name: Remove Old Container
+        continue-on-error: true
+        run: |
+          docker stop ml_app_container
+          docker rm ml_app_container
+
+      # --- STEP 4: START THE APP ---
+      # This boots up the actual application.
+      # -d: Run in the background (detached) so the workflow can finish.
+      # -p 5000:5000: Connects the host machine's port 5000 to the container's port 5000.
+      # --name: Gives the running container an easy-to-read name.
+      - name: Run the Docker Container
+        run: docker run -d -p 5000:5000 --name ml_app_container flask_ml_app
+
+      # --- STEP 5: VERIFICATION ---
+      # Prints a list of active containers to the GitHub Actions log so
+      # we can visually confirm the app is alive and well.
+      - name: Verify Running Containers
+        run: docker ps
